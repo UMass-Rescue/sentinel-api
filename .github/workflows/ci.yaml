@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # The builder stage already has torch, sentinel[sbert], fastapi,
+      # uvicorn, and pydantic-settings installed - everything the test suite
+      # needs except pytest/httpx themselves (dev-only, see requirements-dev.txt).
+      - name: Build builder stage
+        run: docker build --target builder -t sentinel-api-builder .
+
+      - name: Run tests
+        run: |
+          docker run --rm -v "$(pwd)":/workspace -w /workspace sentinel-api-builder \
+            bash -c "pip install -q -r requirements-dev.txt && python -m pytest tests/ -v"
+
+  build:
+    name: Build runtime image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Build image
+        run: docker build -t sentinel-api .
+
+      # No bank is loaded here, so this only confirms the image starts up and
+      # /health responds - not a scoring smoke test. Bank auto-load failures
+      # are caught and logged, not fatal, so this should pass even without
+      # SENTINEL_AUTO_LOAD_BANKS_PATH configured.
+      - name: Start container and check /health
+        run: |
+          docker run -d --name sentinel-api -p 8000:8000 sentinel-api
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health; then
+              echo "Health check passed"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Health check did not pass within 60s"
+          docker logs sentinel-api
+          exit 1
+
+      - name: Container logs (on failure)
+        if: failure()
+        run: docker logs sentinel-api || true
+
+      - name: Clean up container
+        if: always()
+        run: docker rm -f sentinel-api || true
