@@ -61,12 +61,3 @@ otherwise hit real model weights.
 `pytest`/`httpx` are dev-only (`requirements-dev.txt`) and never ship in the runtime image. Running them
 locally still needs the same heavy deps as the image (`torch`, `sentinel[sbert]`, etc.), which is why the
 `builder` stage above is the easiest way to run them.
-
-## Using this with Coop
-
-[UMass-Rescue/coop-public](https://github.com/UMass-Rescue/coop-public) is the reference consumer: its
-`server/services/sentinelService` is a typed HTTP client for this API, and its Sentinel integration lets an
-org point `SENTINEL_API_URL` at wherever this service is deployed. See that repo's
-`docs/testing/sentinel-manual-test-plan.md` for an end-to-end example of running this alongside Coop locally.
-
-There's nothing Coop-specific about this repo, though — any service that can make an HTTP call can use it.
