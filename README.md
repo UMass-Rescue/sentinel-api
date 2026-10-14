@@ -4,21 +4,15 @@ A thin FastAPI wrapper around [Roblox/sentinel](https://github.com/Roblox/sentin
 (`/score`, `/health`, `/banks/*`) instead of as a Python library you import directly.
 
 Sentinel detects rare text patterns (e.g. grooming, hate speech) via contrastive learning — comparing text
-against positive (rare/harmful) and negative (common/normal) example banks. This repo doesn't change any of
-that logic; it just puts a small, reviewable HTTP layer in front of it so any service in any language can
-call it.
+against positive (rare/harmful) and negative (common/normal) example banks. This repository places the
+Sentinel library behind a lightweight HTTP layer.
 
 ## Why this exists
 
 Roblox's own [`Dockerfile`](https://github.com/Roblox/sentinel/blob/main/Dockerfile) packages the `sentinel`
-library and runs example scripts — there's no HTTP service upstream. This repo installs the **unmodified
-upstream library** at a pinned commit as a normal dependency, and `app/` is a small FastAPI app that imports
-it, same as any other consumer of the `sentinel` package would.
-
-`app/` originated from [UMass-Rescue's fork](https://github.com/UMass-Rescue/Sentinel), which vendored an API
-layer directly into a full clone of the library. Here it's adapted to import the **installed** `sentinel`
-package instead of relative imports into a sibling source tree, and keeps Roblox's original Apache-2.0
-license headers.
+library and runs example scripts — there's no HTTP service upstream. This repository installs the
+**unmodified upstream library** at a pinned commit as a normal dependency, and `app/` is a small FastAPI app
+that imports it, same as any other consumer of the `sentinel` package would.
 
 `app/dependencies.py` and `app/routes/scoring.py` are the files that actually reach into `sentinel`'s
 internals (`sentinel_local_index`, `embeddings.sbert`, `score_formulae`, `io.index_io`) — if Roblox renames
@@ -32,8 +26,30 @@ docker run --rm -p 8000:8000 sentinel-api
 curl http://localhost:8000/health
 ```
 
-Configuration is env-driven — see `app/config.py` for the full list of `SENTINEL_*` variables (bank path,
-scoring defaults, etc.).
+## Configuration
+
+Runtime settings are read from environment variables with the `SENTINEL_` prefix (see `app/config.py`).
+They are defined by this API, not by the upstream Sentinel library. Set them on the process (for Docker,
+pass `-e` / `--env-file` to `docker run`).
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SENTINEL_AUTO_LOAD_BANKS_PATH` | unset | Directory of a saved bank (`embeddings.safetensors` + config JSON). If set, banks are loaded at startup. |
+| `SENTINEL_DEFAULT_TOP_K` | `5` | How many nearest neighbors in each bank to use when scoring a message. Overridable per request via `top_k` on `POST /score`. |
+| `SENTINEL_DEFAULT_MIN_SCORE` | `0.1` | Per-message scores below this are treated as 0. Overridable per request via `min_score_to_consider` on `POST /score`. |
+| `SENTINEL_DEFAULT_MIN_SIZE_OF_SCORES` | `5` | Minimum number of per-message scores needed before skewness aggregation is treated as meaningful. Passed through to Sentinel's `skewness()` as `min_size_of_scores`. Not overridable per request. |
+
+Example:
+
+```bash
+docker run --rm -p 8000:8000 \
+  -e SENTINEL_AUTO_LOAD_BANKS_PATH=/data/banks/my_model \
+  -v /path/on/host/banks:/data/banks \
+  sentinel-api
+```
+
+`SENTINEL_COMMIT` in the `Dockerfile` is a build argument (which upstream commit to install), not a runtime
+setting.
 
 ## Upgrading the pinned commit
 

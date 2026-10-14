@@ -19,14 +19,16 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
+    """Runtime settings from SENTINEL_* environment variables (this API, not upstream Sentinel)."""
 
-    # Bank auto-loading (e.g., /data/banks/my_model)
+    # SENTINEL_AUTO_LOAD_BANKS_PATH: saved-bank directory; loaded at startup if set.
     auto_load_banks_path: Optional[str] = None
 
-    # Scoring defaults
+    # SENTINEL_DEFAULT_TOP_K: nearest neighbors per bank; overridable via POST /score `top_k`.
     default_top_k: int = 5
+    # SENTINEL_DEFAULT_MIN_SCORE: zero out weaker per-message scores; overridable via `min_score_to_consider`.
     default_min_score: float = 0.1
+    # SENTINEL_DEFAULT_MIN_SIZE_OF_SCORES: min messages for skewness aggregation; not overridable per request.
     default_min_size_of_scores: int = 5
 
     class Config:
